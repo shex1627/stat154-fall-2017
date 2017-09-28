@@ -1,0 +1,134 @@
+---
+title: "lab3"
+author: "shichenh"
+date: "9/17/2017"
+lab: "Mon 9-11"
+output: pdf_document
+---
+# PCA on Portugal Whole Food Sales Data
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo =FALSE)
+```
+
+
+```{r}
+suppressMessages(library(tidyverse))
+```
+
+# Loading and Cleaning Data
+```{r}
+whole.sale <- suppressMessages(read_csv("~/stat154-fall-2017/data/wholesale.csv"))
+
+# factorizing catoegrical variables 
+whole.sale <- whole.sale %>% mutate(Channel = factor(Channel), Region = factor(Region))
+levels(whole.sale$Channel) <- c("Horeca", "Retail")
+levels(whole.sale$Region) <- c("Lisbon", "Oporto", "Other")
+table(whole.sale$Channel)
+table(whole.sale$Region)
+
+# making a complete numerica data frame for computation
+m <- whole.sale %>% select(-c(Channel, Region))
+```
+
+# "EDA"
+```{r}
+summary(whole.sale)
+
+#visuliazing density curves
+par(mfrow=c(2, 3))
+ggplot(stack(m), mapping = aes(x=values)) + 
+  geom_histogram(bins = 10) +
+  facet_wrap(~ind)
+#applying log first
+ggplot(stack(m), mapping = aes(x=log(values))) + 
+  geom_histogram(bins = 10) +
+  facet_wrap(~ind)
+
+#visualizing boxplots
+ggplot(stack(m), aes(x=ind, y=log(values))) + 
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45))
+```
+Many variables are severely right skewed. Altough after applying log transform, many variables are still slightly left skewed(due to too right skewed).  
+All variables' first and third quantile range are quite similar except the detergents_paper category. Possible explanation
+is that different regions more variance on using deteregents and paper.  
+
+```{r}
+library(corrplot)
+cor(whole.sale %>% select(-c(Channel, Region)))
+corrplot(cor(whole.sale %>% select(-c(Channel, Region))),
+         mar = rep(4, 4),
+         type = "upper", tl.srt = 45)
+
+suppressMessages(library(GGally))
+ggpairs(m)
+```
+
+Grocery is highly related to Detergents_Paper. I wonder if Grocery includes Detergents_Paper.  
+
+# PCA 
+```{r echo=F}
+pca.prcomp <- prcomp(m, scale. = T)
+pca.princomp <- princomp(m, cor = T)
+```
+
+## Challenge
+```{r echo=F}
+loading <- round(matrix(pca.princomp$loading, nrow = 6), 4)
+row.names(loading) <- colnames(m)
+colnames(loading) <- paste(rep("Comp.", 6), 1:6)
+loading
+```
+
+## Difference Btw the Two
+"The calculation is done by a singular value decomposition of the (centered and possibly scaled) data matrix, not by using eigen on the covariance matrix. This is generally the preferred method for numerical accuracy. The print method for these objects prints the results in a nice format and the plot method produces a scree plot.
+
+Unlike princomp, variances are computed with the usual divisor N - 1."
+
+"princomp uses 'eigen' on the correlation or covariance matrix, as determined by cor. This is done for compatibility with the S-PLUS result. "
+
+```{r echo=FALSE}
+eigen.table <- data.frame(pca.princomp$sdev^2, row.names = 1:6)
+colnames(eigen.table) <- 'eigen.value'
+eigen.table$percentage <- eigen.table[,1]/sum(eigen.table[,1])
+eigen.table$cumulative.percentage <- cumsum(eigen.table$percentage)
+eigen.table
+
+barplot(eigen.table[,1], names.arg = paste('PC', 1:6))
+```
+
+The first PC explains 44% of the variable, second 28.r%, theird 12.3 percenge.
+
+
+```{r echo=FALSE}
+t(sqrt(eigen.table[,1]) * t(loading))
+```
+Grocery to PC1, Frozen to PC2, Fresh to PC3. **All categories are negatively correlated with PC1. Some categories are positvely related some are negatively related to PC2.
+
+```{r echo=F}
+pc.customers <- round(data.frame(pca.prcomp$x),1)
+
+ggplot(data.frame(pca.prcomp$x)) +
+  geom_point(aes(PC1, PC2)) 
+
+ggplot(data.frame(pca.prcomp$x)) +
+  geom_point(aes(PC1, PC3)) 
+
+ggplot(data.frame(pca.prcomp$x), aes(PC2, PC3)) +
+  geom_point() + 
+  geom_text(label = paste(pc.customers$PC2,",", pc.customers$PC3),
+            vjust = 1.3,
+            check_overlap = TRUE)
+
+```
+
+Most of the data are clutered and centered around 0 of the two PC we chose.(good or bad?)
+
+```{r echo=FALSE}
+par(mfrow=c(2, 2))
+for (scale in c(0, 0.3, 0.5, 1)) {
+  biplot(pca.prcomp, scale = scale)
+}
+```
+
+The higher the scale is, the further the magnitude the arrow is. Changing the scale does not change the biplot so all of them look the same. 

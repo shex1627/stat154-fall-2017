@@ -1,0 +1,84 @@
+---
+title: "lab4"
+author: "shichenh"
+date: "9/25/2017"
+output: pdf_document
+---
+
+# Mean Centering X
+```{r}
+library(tidyverse)
+reg1 <- lm(mpg ~ disp, data = mtcars)
+
+mtcars.mean <- data.frame(scale(mtcars, scale = FALSE))
+
+reg2 <- lm(mpg ~ disp, data = mtcars.mean)
+
+print(reg1)
+
+# Recovering Beta0
+beta0 <- mean(mtcars$mpg) - reg2$coefficients[2] * mean(mtcars$disp)
+beta0 - reg1$coefficients[1]
+```
+
+## Standardizing X
+```{r}
+#setting up the variables 
+mu.y = mean(mtcars$mpg)
+mu.x = mean(mtcars$disp)
+sd.y = sd(mtcars$mpg)
+sd.x = sd(mtcars$disp)
+
+mtcars.std <- scale(mtcars)
+reg3 <- lm(mpg ~ disp, data = data.frame(mtcars.std))
+
+beta0.from.sd <- mu.y - sd.y/sd.x*reg3$coefficients[2]*mu.x
+beta1.from.sd <- sd.y/sd.x * reg3$coefficients[2]
+c(beta0.from.sd, beta1.from.sd) - reg1$coefficients
+```
+
+To fit a linear model with intercept, use 'lm(y ~ x + 0')
+```{r}
+lm(mpg~disp + 0, data = data.frame(mtcars.std))
+```
+## Fitting a linear model with a subset of data
+```{r}
+lm(mpg ~ disp, data = subset(mtcars, am  == 1))
+```
+# Summary of lm
+```{r}
+summary(reg1)
+
+typeof(reg1)
+#it is a list
+
+names(reg1)
+```
+
+## Plotting the regression line
+```{r}
+ggplot(mtcars, aes(x = mpg, y = disp)) + 
+  geom_point() +
+  stat_smooth(method = "lm", se = F) +
+  geom_text(aes(x = mpg, y = disp, label = rownames(mtcars)), nudge_x = 1)
+```
+## Plots checking linear fit
+```{r}
+par(mfrow=c(1, 2))
+plot(reg1, which = 1)
+plot(reg1, which = 2)
+```
+Thre residuals are not normal at all. The linear fit is not so good.
+
+## Using QR for lm
+```{r}
+qr <- qr(cbind(mtcars$mpg, 1))
+q <- qr.Q(qr)
+r <- qr.R(qr)
+
+#f <- t(q %*% t(matrix(mtcars$disp)))
+#solve(r, f)
+
+
+```
+

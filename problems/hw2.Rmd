@@ -1,0 +1,190 @@
+---
+title: "hw2"
+author: "shichenh"
+date: "9/13/2017"
+lab: "9-11am"
+output: pdf_document
+---
+
+```{r}
+suppressMessages(library(tidyverse))
+knitr::opts_chunk$set(echo = F)
+```
+
+```{r load_data}
+temp <- suppressMessages(read_csv("https://raw.githubusercontent.com/ucb-stat154/stat154-fall-2017/master/data/temperature.csv"))
+colnames(temp)[1] <- "city"
+temp.m <- temp[1:23,2:13]
+# creating a df where city is the column names
+city.temp <- data.frame(t(temp[,2:13]))
+colnames(city.temp) <- unlist(temp[,1])
+
+#variable name storing all cities
+cities <- unlist(temp[,1])
+```
+
+# EDA1
+```{r eda1}
+#check the overall temperature of the cities
+summary(city.temp)
+```
+Summary: The cities do not really have a super high max temperature, at the same tiem many
+have mean temperature lower than 10(pretty cold XD)
+
+```{r eda2}
+table(temp$Area)
+par(mfrow=c(3,3))
+for (i in 1:length(cities)) {
+  barplot(unlist(city.temp[,i]), 
+        names.arg = 1:12,
+        #unifying temperature limit to see the difference
+        ylim = c(-10, 30),
+        xlab = "month", ylab = "temperature(celsius)",
+        main = (paste(cities[i], ":", paste(temp$Area[i], "region"))))
+}
+```
+Seems like East region and north region tend to have temperatures during the winter. 
+I wonder why not the West case? Maybe because the west region is closer to the ocean
+so it makes the cities warmer?
+
+# PCA
+# raw 
+```{r}
+temp.m.mean <- scale(temp.m)
+temp.cor <- cor(temp.m)
+
+#eigen
+temp.cor.eigen <- eigen(temp.cor)
+#svd
+temp.svd <- svd(temp.cor)
+```
+
+##1a displaying first 4 loadings
+```{r}
+loadings <- temp.svd$v
+temp.svd$v[,1:4]
+```
+
+
+##1b obtaining principal components 
+```{r}
+pc <- temp.m.mean %*% temp.svd$v
+pc[,]
+```
+
+
+## 1c display eigen value
+```{r}
+print("eigen values")
+print(round(temp.svd$d, 2))
+print("sum of eigen values")
+sum(temp.svd$d)
+```
+
+
+# 2
+## 2a
+```{r}
+sum_table <- data.frame(cbind(temp.svd$d, round(temp.svd$d/sum(temp.svd$d), 2), cumsum(temp.svd$d)/sum(temp.svd$d)))
+colnames(sum_table) <- c("var", "percent", "percent.cumulative")
+sum_table
+```
+## 2b
+```{r}
+barplot(sum_table$percent,
+        names.arg = paste('PC', 1:length(temp.svd$d)),
+        xlab = "Principal Component", ylab = "Percentage of Variance",
+        main = "Scree Plot")
+```
+
+b.From the chart, it seems only two(probably3) PC contributes to significant amount
+of variance. In other words, many data are redundant.  
+
+c.I would choose the firs 3 dimensions, because it already contains 99% of the 
+data variation.
+
+#3
+## 3a making a scatter plot
+```{r}
+temp.cities <- scale(temp[,2:13])
+cities.pc <- data.frame(cbind(cities, temp.cities %*% loadings[,1:2], temp$Area))
+#cities.pc <- data.frame(cbind(cities, temp.cities %*% t(pc[1:2,])))
+colnames(cities.pc) <- c("city", "pc1", "pc2", "Area")
+cities.pc$active <- c(rep(1, 23), rep(0, 12))
+cities.pc <- cities.pc %>%
+  mutate(active = factor(c(rep(1, 23), rep(0, 12)))) %>%
+  mutate(pc1 = as.numeric(as.character(pc1)), pc2 = as.numeric(as.character(pc2)))
+
+ggplot(cities.pc) +
+  geom_point(aes(pc1, pc2, size = active, color = Area)) +
+  geom_hline(yintercept=0) +
+  geom_vline(xintercept=0) +
+  geom_text(aes(pc1, pc2, label = city), hjust=0, vjust=2)
+```
+
+Most of the South Region cities are in the negative area of PC1, spread in pc2.
+The North region cities are mostly in the positive axes of pc1. The West region
+cities are mostly in the negative axes of city 2. Most of the East region cities 
+are in the positive of both axes. 
+
+## 3b square cosine 
+```{r}
+# Compute the square of the distance between an individual and the
+# center of gravity
+getdistance <- function(ind_row){
+  return(sum(ind_row)^2)
+  }
+d2 <- apply(temp.m.mean, 1, (function(x) sum(x^2)))
+# Compute the cos2
+cos2 <- function(ind.coord, d2){return(ind.coord^2/d2)}
+temp.cos2 <- round(apply(pc, 2, cos2, d2), 4)
+temp.cos2[,1:4]
+```
+
+## 3 c
+```{r}
+ind.contrib <- data.frame(round(t(apply(pc,1, (function(x) 100/(nrow(pc) - 1) * x^2 /temp.svd$d))), 2))
+rownames(ind.contrib) <- cities[1:23]
+colnames(ind.contrib) <- paste('PC', 1:length(temp.svd$d))
+ind.contrib
+```
+Contributing to  
+PC1: Athens, Lisbon, Rome  
+PC2: Reykjavik, Dublin, Moscow  
+
+## 4a Correlation of all
+```{r}
+cor.all <- cor(temp[1:23,2:17], pc)
+colnames(cor.all) <- paste0('PC', 1:12)
+cor.all[,1:4]
+```
+
+## 4b correlation graph
+```{r}
+# Plot the correlation circle
+a <- seq(0, 2*pi, length = 100)
+plot( cos(a), sin(a), type = 'l', col="black",
+      xlab = "PC1",  ylab = "PC2")
+abline(h = 0, v = 0, lty = 2)
+# Add active variables
+arrows(0, 0, cor.all[1:12, 1], cor.all[1:12, 2], 
+      length = 0.1, angle = 15, code = 2,
+      col = "red")
+arrows(0, 0, cor.all[13:16, 1], cor.all[13:16, 2], 
+      length = 0.1, angle = 15, code = 2,
+      col = "grey")
+# Add labels
+text(cor.all[1:12,], labels=rownames(cor.all)[1:12], cex = 1, adj=1, col = "red")
+text(cor.all[13:16,], labels=rownames(cor.all)[13:16], cex = 1, adj=1, col = "grey")
+```
+
+## 4c
+Most of the active components are negativedly correlated with PC1, half positive with
+PC2 negative with PC2. While the sub varibles are positively correlated with PC1 
+except 1.
+
+# Final Conclusion
+Despite not fully understanding how PCA works mathematically. From the graphs we can 
+see it is very powerful in data compression or feature reduction.I am surprised how 
+well the pc1, pc2 graph clusters cities from different regions.
+
