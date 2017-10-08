@@ -1,0 +1,343 @@
+---
+title: 'Problem Set3: Least Square Regression'
+output:
+  pdf_document: default
+  html_notebook: default
+  header-includes:
+   - \usepackage{amsmath}
+---
+
+```{r echo=F, message=FALSE}
+library(readr)
+library(tidyverse)
+```
+
+# Problem 1
+Simple linear regression is to find $b_0$, $b_1$ such that they minimize the quadratic
+loss function(no regularization).
+$$
+L(\beta_0, \beta_1) = \sum (y_i - \beta_0 - \beta_1 xi)^2
+$$
+To find the global minimum, we take the partial derivatives with respect to each 
+parameter of this multivariable($\mathbb{R}^2 \rightarrow \mathbb{R}$) function.
+$$
+\frac{\partial L}{\partial\beta_0} = 2*(-1)*\sum_{i=1}^n(y_i - \beta_0 - \beta_1 x_i) = 0 \\
+\frac{\partial L}{\partial\beta_1} = 2*\sum_{i=1}^n(-x_i)(y_i - \beta_0 - \beta_1 x_i) = 0
+$$
+so $\sum_{i=1}^n(y_i - \beta_0 - \beta_1 x_i) = \frac{0}{-2} = 0$, therefore 
+$\sum_{i=1}^n e_i = 0$
+
+# Problem 2
+a. Becuase a matrix's cross product with its transpose is a symmetric matrix,  
+
+$$
+X^TX = 
+\begin{bmatrix}
+30 & 0 & 0 \\
+0 & 10 & 7 \\
+0 & 7 & 15
+\end{bmatrix}
+$$
+n = 30(the inner product of the column with the constant term)  
+b.According to the property of matrix cross product, 
+
+$$
+X^TX = 
+\begin{bmatrix}
+n & \sum X_i & \sum Z_i \\
+0 & \sum X_i^2 & \sum X_i Z_i \\
+0 & 7 & \sum Z_i^2 
+\end{bmatrix}
+$$
+and
+$cor(x, z) = \frac{n\sum X_iZ_i - \sum X_i\sum Z_i}{\sqrt{n\sum X_i^2 - (\sum X_i)^2}\sqrt{n\sum Z_i^2 - (\sum Z_i)^2}}$  
+
+so  
+
+$$
+\begin{aligned}
+cor(x, z) &= \frac{30 * 7 - 0 *0}{\sqrt{30 * 10 - 0^2} * \sqrt{30 * 15 - 0^2}} \\
+          &= \frac{210}{\sqrt{300} * \sqrt{450}} \\
+          &= 0.5715476
+\end{aligned}
+$$
+c.  
+$\bar y = - 2 + \bar x + 2 \bar z = - 2 + \frac{1}{n}(\sum X_i + 2\sum Z_i) = - 2 + 0 + 2*0  = -2$
+
+d.  
+Given, $R^2 = \frac{||\hat y||^2}{||y||^2} = \frac{\sum (\hat y - \bar y)^2}{\sum (\hat y - \bar y)^2 + RSS}$,
+To find $R^2$, we have to find $\sum (\hat y - \bar y)^2$
+
+$$
+\begin{aligned}
+\sum (\hat y - \bar y)^2 &= \sum (-2 + x_i + 2z_i - (-2))^2 \\
+                         &= \sum (x_i + 2z_i)^2 \\
+                         &= \sum (x_i^2 + 4z_i^2 + 4x_iz_i) \\
+                         &= \sum x_i^2 + 4\sum z_i^2 + 4\sum x_iz_i \\
+                         &= 10 + 4*15 + 4*7 \\
+                         &= 98
+\end{aligned}
+$$
+
+we have
+$\sum (\hat y - \bar y)^2 = 46$ and $R^2 = \frac{\sum (\hat y - \bar y)^2}{\sum (\hat y - \bar y)^2 + RSS} = \frac{98}{98+12} = 0.8909091$
+
+# Problem 3
+```{r}
+set.seed(1)
+#a
+x <- rnorm(100)
+#b
+eps <- rnorm(100, mean = 0, sd = 0.5)
+#c
+y <- -1 + 0.5*x + eps
+#d
+plot(x, y)
+#e
+reg <- lm(y~x)
+summary(reg)
+#f 
+plot(x, y)
+abline(reg, col = "blue")
+abline(a=-1, b=0.5, col = "black")
+legend("topright", c("regression", "actual"), col=c("blue", "black"), lty=1, cex=0.8)
+
+#g
+reg2 <- lm(y ~ poly(x, 2, raw=T))
+print("reg1 vs reg2, absolute error vs square error")
+print(paste(sum(abs(reg$residuals)), sum(abs(reg2$residuals))))
+print(paste(sum(reg$residuals * reg$residuals), sum(reg2$residuals*reg2$residuals)))
+```
+
+Comment:
+d: the plot looks decently homoscedastic
+e: the estimates are very close
+g: the 2nd degree polynomial has a better(smaller) MSE but higher sum of absolute errors. In summary, the performance of 1degree and 2degree is difficult to tell. 
+
+### h
+```{r}
+set.seed(1)
+#a
+x <- rnorm(100)
+#b
+eps <- rnorm(100, mean = 0, sd = 0.1)
+#c
+y <- -1 + 0.5*x + eps
+#d
+plot(x, y)
+#e
+reg <- lm(y~x)
+summary(reg)
+#f 
+plot(x, y)
+abline(reg, col = "blue")
+abline(a=-1, b=0.5, col = "black")
+legend("topright", c("regression", "actual"), col=c("blue", "black"), lty=1, cex=0.8)
+```
+
+Comment:
+g.The two lines almost overlap each other. When there is less noise, simple linear regression owns. 
+
+# i
+```{r}
+#b
+eps <- rnorm(100, mean = 0, sd = 1)
+#c
+y <- -1 + 0.5*x + eps
+#d
+plot(x, y)
+#e
+reg <- lm(y~x)
+summary(reg)
+#f 
+plot(x, y)
+abline(reg, col = "blue")
+abline(a=-1, b=0.5, col = "black")
+legend("topright", c("regression", "actual"), col=c("blue", "black"), lty=1, cex=0.8)
+```
+
+Comment:
+g. With more noise(can see from the graph), the regression line tilts wider away from the "true" process, however, it is still
+relatively close under this level of noise. 
+
+# Problem4
+```{r}
+#refer to the lab result
+# ols fit using QR 
+ols_fit <- function(X, y) {
+  # Computer an OLS fit for linear regression using QR, returning multiple aspects of the fit
+  #
+  #Args:
+  # x: a matrix with 1s, and other predictors 
+  # y: the response variable
+  #
+  #Returns:
+  # A list of information about the ols fit, with attributes
+  #   coefficients: intercept, slope1, slope2 and etc.
+  #   y_values: y
+  #   fitted_values
+  #   residuals: y_values - fitted_values
+  #   n: number of observations
+  #   q: number of parameters  
+  
+  #using qr to computer cofficients
+  qr <- qr(X)
+  q <- qr.Q(qr)
+  r <- qr.R(qr)
+  b <- solve(r, t(q) %*% y)
+  
+  #fitted values and residuals
+  y.hat <- crossprod(t(X), b)
+  resi <- y - y.hat
+  
+  return(list(coefficients=b, y_values=y, fitted_values=y.hat, residuals=resi, n=length(y), q=ncol(X)))
+}
+```
+### Testing 4
+```{r}
+fit <- ols_fit(cbind(1, mtcars$disp, mtcars$hp), mtcars$mpg)
+names(fit)
+fit$coefficients
+summary(fit$fitted_values)
+summary(fit$residuals)
+```
+
+# Problem5
+```{r}
+R2 <- function(fit) {
+  y.bar <- mean(fit$y_values)
+  regss <- sum((fit$fitted_values - y.bar) * (fit$fitted_values - y.bar))
+  tss <- sum((fit$y_values - y.bar) * (fit$y_values - y.bar))
+  return(regss/tss)
+}
+
+RSE <- function(fix) {
+  RSS <- sum(fit$residuals * fit$residuals)
+  return(sqrt(RSS/(fit$n-fit$q)))
+}
+```
+
+### Testing Problem5
+```{r}
+fit <- ols_fit(cbind(1, mtcars$disp, mtcars$hp), mtcars$mpg)
+R2(fit)
+RSE(fit)
+```
+
+
+#problem6
+```{r}
+#gradually adding feature and checking mse and R
+prostate <- read.table("~/stat154-fall-2017/data/prostate.txt", row.names = 1)
+
+y <- prostate$lpsa
+
+performance <- matrix(-1, nrow=ncol(prostate)-1, ncol=2)
+features <- c('lcavol', 'lweight', 'svi', 'lbph', 'age', 'lcp', 'pgg45', 'gleason')
+for (i in 1:length(features)) {
+  X <- cbind(1, prostate[,features[1:i]])
+  reg.temp <- ols_fit(X, y)
+  performance[i, 1] <- RSE(reg.temp)
+  performance[i, 2] <- R2(reg.temp)
+}
+rownames(performance) <- features
+colnames(performance) <- c("RSE", "R2")
+
+par(mfrow=c(1,2))
+plot(performance[,1], 
+     col = "red", xlab = "number of features", ylab = "RSE")
+plot(performance[,2], 
+     col = "blue", xlab = "number of features", ylab = "R2")
+```
+
+As we add more features, we tend to overfit the model(reducing our errors) but RSE
+remains the same(the standard deviation of our errors). In other words, as we add
+more features, we are unable to narrow down the errors of our forecasts. 
+
+#problem7
+```{r}
+auto <- read.table("http://www-bcf.usc.edu/~gareth/ISL/Auto.data", header = T)
+auto$horsepower <- as.numeric(auto$horsepower)
+
+auto.quan <- dplyr::select(auto, -name)
+#a
+pairs(auto)
+#b
+cor.m <- cor(auto.quan)
+cor.m
+```
+
+c.
+```{r}
+auto.reg <- lm(mpg~., data=auto.quan)
+summary(auto.reg)
+```
+
+there is a relationship btw the predictors and response because the adjusted Rsquare 
+is pretty high and F-test is statistically significant.  
+
+displacement, weight, acceleration, year and origin are statistically significant predictors.  
+
+year's coefficient suggests for each increase year(of production), the vehicle's mpg 
+increases by 0.7734.  
+
+```{r}
+#d
+plot(auto.reg, which=1:6)
+```
+
+Comments:
+The residual plot suggests observation 323, 326, 327 have high (positive) residuals(and 
+a few unlabeledp points). Among them(obs. 323, 326, 327), 327 and 394 has relatively high cook's distance(influence on the parameters), 
+along with obs. 14, with abnormally high cook's distance and leverage.  
+
+Own Obersvations:  
+High leverage points doesn't ensure high influence on the model(but many of them do).  
+
+### e. modeling with interaction effect
+```{r}
+auto.reg.inter <- auto.reg.test <- lm(mpg~. + displacement*weight,
+                   data = auto.quan 
+                   )
+summary(auto.reg.inter)
+```
+
+Year, I choose displacement*weight. Things I find:  
+using the "cateogrical" numerical variable(categorical variable that are numerically encoded) is
+kind of a mess. I have a 0.4 improvment in RSE and 0.04 improvement in adjusted R2.
+
+### f. variable transformation
+## First check the distribution of the variables
+```{r}
+par(mfrow=c(3,3))
+for(i in 1:8) {
+  hist(auto.quan[,i], main = colnames(auto.quan)[i])
+}
+```
+
+## best results from trying out new things
+```{r}
+auto.reg.test <- lm(mpg~.,
+                   data = auto.quan %>% 
+                     #deleting extra features that does not marginally improve performance
+                     select(-c(horsepower, displacement, acceleration)) %>%
+                     #factorizing the cateogrical variables
+                     mutate(cylinders = factor(cylinders)) %>%
+                     mutate(origin = factor(origin)) %>% 
+                     #applying log to the right skewed variable
+                     mutate(mpg = log(mpg)) %>%
+                     mutate(weight = log(weight))) 
+      
+                
+summary(auto.reg.test)
+```
+
+After few minutes of tweakings, I find that:  
+
+1. log(mpg) has better performance than log2(mpg), but log transformation helps in general since the distribution of 
+mpg is right skewed.  
+2. factorizing categorical variables help in this case
+3. agumenting old features may make some features less significant(may due to multicolinearity)
+4. scaling a variable doesn't really affect the performance. 
+5.RSE maybe misleading since log scale will reduce the scale of the error
+

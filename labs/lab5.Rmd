@@ -1,0 +1,216 @@
+---
+title: "lab5"
+author: "shichenh"
+date: "10/2/2017"
+output: pdf_document
+fontsize: 12pt
+---
+
+```{r echo=F}
+library(ggplot2)
+```
+
+## Confidence Interval
+
+```{r}
+reg <- lm(mpg~disp + hp, data = mtcars)
+
+summary(reg)
+#confidence interval
+coefs <- reg$coefficients
+a <- 0.95
+#question ,why minus three 
+tscores <- qt(c((1-a)/2, a +(1-a)/2), df = nrow(mtcars)-3)
+sum <- summary(reg)
+coefs[1] +  sum$coefficients[1,2] * tscores
+coefs[2] + sum$coefficients[2,2] * tscores
+coefs[3] + sum$coefficients[3,2] * tscores
+
+confint(reg)
+```
+
+## Hypothesis Testing  
+
+1. The choice of c is 0 
+```{r}
+(30.7359-0)/1.331566
+(-0.030345-0)/0.007405
+(-0.024840-0)/0.013385
+```
+
+2. The alternative hypothesis is two-sided because Pr(>|t|), so t could be either postive or negative. \*** means p value smaller than 10^3, and . means p value greater or equal to 5%. On the inference side, \*** strongly statistical significant to reject the hypothesis, and '.' suggests we are not sure if we have to reject the null hypothesis.
+
+3. Base on the result(p=0.0003 < 0.05) so we reject the null hypothesis in favor of the alternative hypothesis.
+
+4. 
+```{r}
+t1 <- (coefs[2] - (-0.05))/sum$coefficients[2,2] 
+p1 <- 1 - pt(t1, df=nrow(mtcars-3))
+p1
+```
+
+Because p1 < 0.05, we reject the null hypothesis and accept the alternative hypothesis.
+
+## Assessment of model predictive power
+
+### Modeling with polynomial regressions
+
+```{r}
+attach(mtcars)
+poly1 <- lm(mpg~poly(disp, 1, raw=T)) 
+poly2 <- lm(mpg~poly(disp, 2, raw=T))
+poly3 <- lm(mpg~poly(disp, 3, raw=T))
+poly4 <- lm(mpg~poly(disp, 4, raw=T))
+poly5 <- lm(mpg~poly(disp, 5, raw=T))
+poly6 <- lm(mpg~poly(disp, 6, raw=T))
+
+mse <- c(
+poly1$residuals %*% poly1$residuals / nrow(mtcars),
+poly2$residuals %*% poly2$residuals / nrow(mtcars),
+poly3$residuals %*% poly3$residuals / nrow(mtcars),
+poly4$residuals %*% poly4$residuals / nrow(mtcars),
+poly5$residuals %*% poly5$residuals / nrow(mtcars),
+poly6$residuals %*% poly6$residuals / nrow(mtcars)
+)
+
+plot(1:6, mse, xlab = "poly degree fit", ylab = "in-sample mse")
+```
+
+Polynomial with degree 5 has smallest mse. The in-sample mse decreases(seemingly exponentially) as the degree increases.
+
+### Holdout set
+
+```{r}
+fits.df <-data.frame(poly.degree = 1:6)
+for (i in 1:1) {
+  holdout.length <- floor(nrow(mtcars) * 0.2)
+  holdout.index <- sample(seq_len(nrow(mtcars)), holdout.length)
+  holdout <- mtcars[holdout.index,]
+  train <- mtcars[-holdout.index,]
+  performance <- data.frame()
+  for (i in 1:6) {
+    reg <- lm(mpg~poly(disp, i, raw=T), data = train)
+    train.mse <- reg$residuals %*% reg$residuals / nrow(train)
+    Xt = cbind(rep(1, nrow(holdout)), poly(holdout$disp, i, raw=T))
+    holdout.resi = (Xt %*% as.matrix(reg$coefficients)) - holdout$mpg
+    holdout.mse = (holdout.resi[,1] %*% holdout.resi[,1]) / nrow(holdout)
+    performance <- rbind(performance, c(i, train.mse, holdout.mse))
+  }
+  colnames(performance) <- c("poly.degree", "train.mse", "holdout.mse")
+}
+
+ggplot(performance, aes(x=poly.degree)) +
+  geom_line(aes(y=train.mse), color = "blue") +
+  geom_line(aes(y=holdout.mse), color = "red") +
+  ylab("mse")
+
+ggplot(performance, aes(x=poly.degree)) +
+  geom_line(aes(y=train.mse), color = "blue") +
+  ylab("mse")
+
+ggplot(performance, aes(x=poly.degree)) +
+  geom_line(aes(y=holdout.mse), color = "red") +
+  ylab("mse")
+```
+The third degree regression gives least holdout mse.(however the answer is not always consistent)
+
+## Cross-validation
+
+```{r}
+library(caret)
+```
+
+```{r}
+crossval <- function(df, n) {
+  performance.cross <- matrix(-1, nrow = 6, ncol = n)
+  folds <- createFolds(mtcars$mpg, n)
+  for (deg in 1:6) {
+    for (fold in 1:length(folds)) {
+      data = mtcars[-folds[[fold]],]
+      temp.reg = lm(mpg~poly(disp, deg, raw=T), data = data)
+      performance.cross[deg, fold] = temp.reg$residuals %*% temp.reg$residuals / nrow(data)
+    }
+  }
+  return(performance.cross)
+}
+
+par(mfrow=c(2, 2))
+plot(1:6, apply(crossval(mtcars, 10), 1, mean),
+     xlab = "", ylab = "MSE-CV", main = "10 fold")
+text(1:6, apply(crossval(mtcars, 10), 1, mean), 
+     apply(crossval(mtcars, 10), 1, mean), 
+     cex=0.6, pos=4, col="red")
+
+plot(1:6, apply(crossval(mtcars, 5), 1, mean),
+     xlab = "", ylab = "MSE-CV", main = "5 fold")
+text(1:6, apply(crossval(mtcars, 5), 1, mean), 
+     apply(crossval(mtcars, 5), 1, mean), 
+     cex=0.6, pos=4, col="red")
+
+plot(1:6, apply(crossval(mtcars, 32), 1, mean),
+     xlab = "", ylab = "MSE-CV", main = "32 fold")
+text(1:6, apply(crossval(mtcars, 32), 1, mean), 
+     apply(crossval(mtcars, 32), 1, mean), 
+     cex=0.6, pos=4, col="red")
+```
+
+2. deg5, or 6 polynomial regression generally has the best mse because it tends to overfit the data(even though we have less data for each fold calculation). 
+
+3. The CV-MSE stays pretty close but not the same because each time the data used to train the same degree polynomial is different. But in general the data shares similar linear relationship. 
+
+## Bootstrap
+```{r}
+n = 400
+performance.boot <- matrix(-1, nrow = 6, ncol = 400)
+for (deg in 1:6) {
+  for (i in 1:400) {
+    sample.index = unique(sample(1:nrow(mtcars), replace = T))
+    data = mtcars[sample.index, ]
+    temp.reg = lm(mpg~poly(disp, deg, raw=T), data = data)
+    testset = mtcars[-sample.index, ]
+    Xt = cbind(rep(1, nrow(testset)), poly(testset$disp, deg, raw=T))
+    temp.resi = (Xt %*% as.matrix(temp.reg$coefficients)) - testset$mpg
+    temp.mse = (temp.resi[,1] %*% temp.resi[,1]) / nrow(testset)
+    performance.boot[deg, i] = temp.mse
+  }
+}
+performance.boot[,1:10]
+```
+
+
+2.
+```{r}
+plot(1:6, apply(performance.boot, 1, mean),
+      xlab = "poly degree", ylab = "bootstrap mse")
+
+which.min(apply(performance.boot, 1, mean))
+```
+
+The third degree polynomail regression gives the lowest boostrap mse. It is reasonable since, look at the graph below, the plot resembles are higher degree polynomial function. However, the if the order is too higher it will overfit the training data and increases variance of test data.  
+```{r}
+plot(mtcars$disp, mtcars$mpg)
+```
+
+3. 
+```{r}
+plot(1:6, apply(performance.boot, 1, sd),
+      xlab = "poly degree", ylab = "bootstrap mse")
+apply(performance.boot, 1, sd)
+```
+
+After third degree, the higher the degree the higher the standard deviation(variance) of the MSE
+
+4.
+```{r}
+par(mfrow=c(2, 3))
+for (i in 1:6) {
+  hist(performance.boot[i,], 
+       xlab = "mse", main = paste("mse", i, "degree poly"))
+}
+```
+
+The distributions of mse tend to be more right skewed as the order of degree increases.
+
+5. bootstrap method works well demonstrate how future proof a model is by showing the variance of mse(measure of model performance). However, the bootstrap methods shows us some polynomial regressions are unreliable.
+
+
