@@ -1,0 +1,139 @@
+---
+title: "Lab 6"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r echo=F, message=F}
+library(ISLR)
+library(tidyverse)
+library(pls)
+```
+
+# 1 
+```{r}
+Hitters <- Hitters
+data.frame(colMeans(is.na(Hitters)))
+
+Hitters <- Hitters %>% na.omit()
+data.frame(colMeans(is.na(Hitters)))
+
+design.m <- model.matrix(Salary~., data = Hitters) # eliminating the constant column
+X <- scale(design.m[,-1])
+y <- Hitters$Salary
+
+X.svd <- svd(X)
+Z <- X %*% X.svd$v
+
+pcr_fit <- pcr(Salary ~ ., data = Hitters, scale = TRUE, validation = "none")
+colMeans((abs(pcr_fit$scores) - abs(Z)) <= 0.1^5)
+```
+
+# 2
+```{r}
+z1 <- Z[,1]
+b1 <- solve(t(z1) %*% z1)%*%t(z1) %*% y 
+y.hat.1 <- b1 %*% z1
+
+sum(((y.hat.1 + mean(y)) - pcr_fit$fitted.values[,,1]))
+```
+
+# 3
+```{r}
+b.pcr <- solve(t(Z) %*% Z) %*% t(Z) %*% y
+y.hat <- Z %*% b.pcr
+
+sum((y.hat + mean(y)) - pcr_fit$fitted.values[,,19])
+```
+
+# 4
+```{r}
+b1.star <- X.svd$v[,1] %*% t(X.svd$u[,1]) %*% y/X.svd$d[1]
+
+sum(b1.star - as.numeric((b1%*%X.svd$v[,1])))
+```
+
+# Partial Least Squares Regression
+```{r plsr1}
+#remove observations with missing salaries from Hitters
+Hitters <- Hitters %>% na.omit()
+data.frame(colMeans(is.na(Hitters)))
+#generating matrix X 
+design.m <- model.matrix(Salary~., data = Hitters) # eliminating the constant column
+X.plsr <- scale(design.m[,-1])
+#generating vector y
+y.plsr <- scale(Hitters$Salary)
+```
+
+```{r plsr_util}
+normalize <- function(x) {x / sqrt(sum(x^2))}
+```
+
+
+```{r plsr2}
+X.temp <- X.plsr
+y.temp <- y.plsr
+for (h in 1:1) {
+  w1 <- t(X.temp) %*% y.temp
+  w1 <- normalize(w1)
+  z1 <- (X.temp  %*% w1)/as.numeric(t(w1) %*% w1)
+  p1 <- (t(X.temp) %*% z1)/as.numeric(t(z1) %*% z1)
+  #updating X
+  X.temp <- X.temp - z1 %*% t(p1)
+  b1 <- (t(y.temp) %*% z1)/as.numeric(t(z1) %*% z1)
+  #updating Y
+  y.temp <- y.temp - as.numeric(b1) * z1
+}
+```
+
+```{r checking}
+pls.fit <- plsr(y.plsr~X.plsr)
+sum(abs(pls.fit$loading.weights[,1] - w1))
+sum(abs(pls.fit$scores[,1] - z1))
+sum(abs(pls.fit$loadings[,1] - p1))
+```
+
+```{r homemade_pls}
+plsr.custom <- function(X, y) {
+  #### initalizing 
+  r <- ncol(X)
+  X.temp <- X
+  y.temp <- y
+  weights <- vector()
+  scores <- vector()
+  loading <- vector()
+  residuals <- vector()
+  coefficients <- as.numeric()
+  #### computation
+  for (h in 1:r) {
+    w.temp <- t(X.temp) %*% y.temp
+    w.temp <- normalize(w.temp)
+    #
+    weights <- cbind(weights, w.temp)
+    z.temp <- (X.temp  %*% w.temp)/as.numeric(t(w.temp) %*% w.temp)
+    #
+    scores <- cbind(scores, z.temp)
+    p.temp <- (t(X.temp) %*% z.temp)/as.numeric(t(z.temp) %*% z.temp)
+    View(p.temp)
+    #
+    loading <- cbind(loading, p.temp)
+    #updating X
+    X.temp <- X.temp - z.temp %*% t(p.temp)
+    b.temp <- (t(y.temp) %*% z.temp)/as.numeric(t(z.temp) %*% z.temp)
+    #
+    coefficients[h] <- as.numeric(b.temp)
+    #updating Y
+    y.temp <- y.temp - as.numeric(b.temp) * z.temp
+    #
+    residuals <- cbind(residuals, y.temp)
+  }
+  return(list(Weights=weights,
+              Scores=scores,
+              Loadings=loading,
+              Residuals=residuals,
+              Coefficients=coefficients))
+}
+```
+
+
