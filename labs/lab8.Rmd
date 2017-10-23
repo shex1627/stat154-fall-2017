@@ -1,0 +1,168 @@
+---
+title: "lab8"
+author: "shichenh"
+date: "10/23/2017"
+output: pdf_document
+---
+
+```{r}
+library(ISLR)
+library(FactoMineR)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+Default <- Default
+```
+
+# EDA
+```{r}
+ggplot(Default) +
+  geom_point(aes(x=balance, y=income, color=default)) +
+  labs(title="Scatter Plot of Balance and Income")
+
+
+ggplot(Default) +
+  geom_density(aes(x=balance, color=default)) +
+  labs(title="Kernel Density of Balance")
+
+ggplot(Default) +
+  geom_density(aes(x=income, color=default)) +
+  labs(title="Kernel Density of Income")
+```
+
+
+# Default
+## OLS Regression
+```{r}
+default_numeric <- rep(0, nrow(Default))
+default_numeric[Default$default == 'Yes'] <- 1
+Default$default_num <- default_numeric
+ols_reg <- lm(default_num ~ balance, data = Default)
+summary(ols_reg)
+```
+
+## Logistic Regression 
+```{r}
+logreg_balance <- glm(default ~ balance, family = binomial, data = Default)
+summary(logreg_balance)$coefficients
+```
+
+```{r regressing_balance}
+balance <- seq(100, 2000, by=100)
+odds.balance <- exp(predict(logreg_balance, newdata = data.frame(balance)))
+pred.balance <- odds.balance/(1+odds.balance)
+plot(pred.balance)
+```
+```{r regressing_student}
+logreg_student <- glm(default ~ student, family = binomial, data = Default)
+summary(logreg_student)$coefficients
+```
+
+If the person is a student, then the log odds of it being default increases by 0.4048871.
+
+```{r}
+logreg_all <- glm(default ~., family = binomial, data = Default)
+summary(logreg_all)
+```
+
+Only *income* is not statistically significant.  
+The apparent contradiction between the opposite signs of the
+student coefficients may due to colinearity among student, balance and income.  
+
+# Stock Market
+```{r}
+Smarket <- Smarket
+```
+
+## Variables
+```{r}
+cor(Smarket %>% select(-Direction))
+#pca
+PCA(Smarket[ ,-9])
+#
+```
+
+The lag variables are not so correlated with today's return. So previous days return does not seem to correlate with today's return.
+
+```{r}
+ggplot(Smarket) +
+  geom_point(aes(x=Year, y=Volume))
+```
+
+## Logistic Regression
+```{r}
+logreg_smarket <- glm(Direction~., family = binomial, data = Smarket %>% select(-c(Year, Today)))
+summary(logreg_smarket)
+```
+
+None of the coefficients are significant. Lag1 coefficient is -0.073074. The negative sign means the Lag1 is inversely proportion to the log odds of Ups/Downs. If log1 increases, today's return is less likely to be up.
+
+```{r}
+pred.smarket <- predict(logreg_smarket, newdata= Smarket %>% select(-c(Year, Today, Direction)), type="response")
+pred.smarket[1:10]
+```
+
+
+# Parameters Estimation
+## Newton-Raphson
+```{r}
+x <- model.matrix(Direction~., data = Smarket %>% select(-c(Year, Today)))
+
+y <- as.matrix(Smarket %>% 
+  mutate(Direction = ifelse(as.numeric(Direction) == 2,1,0)) %>% select(Direction)
+)
+```
+
+```{r}
+#number of iterations 
+n.iter = 100
+b0 <- as.matrix(rep(0, 7))
+i <- 1
+
+p <- exp(x %*% b0)/(1 + exp(x %*% b0))
+w <- diag(p[1:length(p)]) * (1-p[1:length(p)])
+z <- x %*% b0 + solve(w) %*% (y - p)
+b <- solve(t(x) %*% w %*% x) %*% t(x) %*% (w) %*% z
+
+while (sum(abs(b - b0)) >= 0.1^5 && i <= n.iter) {
+  b0 <- b
+  p <- exp(x %*% b0)/(1 + exp(x %*% b0))
+  w <- diag(p[1:length(p)]) * (1-p[1:length(p)])
+  z <- x %*% b0 + solve(w) %*% (y - p)
+  b <- solve(t(x) %*% w %*% x) %*% t(x) %*% (w) %*% z
+  i <- i + 1
+}
+
+print(sum(abs(b-b0)))
+print(b)
+```
+
+## Simplified Algoirthm
+```{r}
+n.iter = 100
+b0 <- as.matrix(rep(0, 7))
+i <- 1
+```
+
+```{r}
+p <- exp(x %*% b0)/(1 + exp(x %*% b0))
+x.hat <- t(x) %*% (p*(1-p))
+b <- b0 + solve(t(x) %*% x) %*% t(x) %*% (y-p)
+
+while (sum(abs(b-b0)) >= 0.1^8 & i <= n.iter) {
+  b0 <- b
+  p <- exp(x %*% b0)/(1 + exp(x %*% b0))
+  x.hat <- x
+  for (j in 1:length(p)) {
+    x.hat[i,] = x.hat[i,] * p[i] * (1 - p[i])
+  }
+  b <- b0 + solve(t(x) %*% x.hat) %*% t(x) %*% (y-p)
+  i <- i + 1
+}
+
+print(sum(abs(b-b0)))
+print(b)
+```
+
