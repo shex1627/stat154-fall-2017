@@ -1,0 +1,215 @@
+---
+title: "hw4"
+author: "shichenh"
+date: "10/21/2017"
+output: pdf_document
+---
+
+# Problem 1
+let $\sigma = \sigma 1 = \sigma 2 = \sigma 3$.  
+Because $r_{12} = r_{13} = r_{23} = 0$, $\sigma_4^2 = \sigma_1^2 + \sigma_2^2 + \sigma_3^3 = 3\sigma^2$
+$$
+\begin{aligned}
+r_{14} = cor(X_1, X_4) &= \frac{cov(X_1, X_4)}{\sigma_4 * \sigma_1} \\
+                       &= \frac{cov(X_1, X_1 + X_2 + X_3)}{\sigma_4 * \sigma_1} \\ 
+                       &= \frac{cov(X_1, X_1) + cov(X_1, X_2) + cov(X_1, X_3)}{\sigma_4 * \sigma_1} \\
+                       &= \frac{\sigma_1^2 + 0 + 0}{\sigma_4 * \sigma_1} \\ 
+                       &= \frac{\sigma^2 + 0 + 0}{\sqrt{3*\sigma^2} * \sigma} \\
+                       &= \frac{\sigma^2}{\sqrt{3} * \sigma^2} \\
+                       &= \frac{1}{\sqrt{3}} = 0.577
+\end{aligned}
+$$
+
+Similary, $r_{14} = r_{24} = r_{34} = 0.577$
+
+# Problem 2
+### Core Idea
+The central idea of the proof is to show for all $v \in X_1$ is orthogonal to $z_1$ and for all h, $X_h \subset X_{h-1}$. So bc
+$z_h \in X_{h-1} \subset X_1$, $z_h^T z_1= 0$.  
+
+### Notations
+let $h$ be the possible index of our algorithm.  
+let $X_h$ be the model matrix after finding $h$ components, $X_h[j]$ be the $j^{th}$ column of matrix $X_h$.
+
+### Assumptions
+In our proof, we assume $w_h$ will never be 0. If it is zero, then $z_h$ will be 0, the proof will be trivial.  
+Then bc $z_1 = X_0w_1$, $z_1 \in span\{X_0\}$.  
+bc $X_1 = X_0 - z_1 * \frac{X_0^T z_1}{z_1^T z_1}$,  
+For $\forall j$,  
+$$
+X_1[j] = X_0[j] - z_1 * \frac{X_0[j]^T z_1}{z_1^T z_1}
+$$
+
+We can see  
+  
+1. $\forall j, X_1[j]$ is orthogonal to $Z_1$ because it is $X_0[j]$ substracts its projection onto $Z_1$, so therefore all vectors in $X_1$ are orthogonal $Z_1$.  
+
+2. $X_1 \subset X_0$ because $X_1[j]$ is a linear combination of $X_0[j]$ and $Z_1$.  
+
+With similar argument on
+$$
+X_h[j] = X_{h-1}[j] - z_h * \frac{X_{h-1}[j]^T z_h}{z_h^T z_h}
+$$
+
+we can see  
+$\forall h, X_h \subset X_{h-1}$ because $X_h[j]$ is a linear combination of $X_{h-1}[j]$ and $Z_h$. So $X_h \subset X_{h-1}...\subset X_1$.  
+bc $z_h = X_{h-1} w_h$ and $w_h \neq 0$, $z_h \in X_{h-1} \subset X_1$, $z_h^T z_1= 0$.  
+
+
+# Problem 3
+
+```{r libraries, message=F}
+library(pls)
+library(ISLR)
+library(leaps)
+library(glmnet)
+library(dplyr)
+library(tidyverse)
+library(reshape)
+```
+
+```{r loading_data} 
+prostate <- read.table("https://web.stanford.edu/~hastie/ElemStatLearn/datasets/prostate.data")
+train <- prostate %>% 
+  filter(train) %>%
+  select(-train)
+test <- prostate %>% 
+  filter(!train) %>%
+  select(-train)
+```
+
+```{r correlation}
+cor.m <- cor(train %>% select(-lpsa))
+cor.m
+```
+
+```{r standardizing_and_seed}
+train.x <- scale(train[,-c(9)])
+test.x <- scale(test[,-c(9)])
+seed <- 1
+summary(train.x)
+```
+
+## Least Square
+```{r}
+ols <- lm(train$lpsa~train.x)
+ols.pred <- model.matrix(test$lpsa~test.x) %*% ols$coefficients
+ols.mse <- mean((ols.pred - test$lpsa)^2)
+ols.coef <- ols$coefficients
+summary(ols)
+```
+
+## Best subset
+```{r}
+set.seed(seed)
+best.sub <- regsubsets(x=train.x, y=train$lpsa, method="exhaustive")
+
+val.error <- rep(NA, 8)
+for (i in 1:8) {
+  coefi <- coef(best.sub, id=i)
+  test.m <- model.matrix(test$lpsa~test.x)
+  pred <- test.m[,1:length(coefi)] %*% coefi
+  val.error[i] = mean((test$lpsa - pred)^2)
+}
+
+npred <- which.min(val.error)
+best.sub.mse <- val.error[npred]
+best.sub.mse
+```
+
+## PCR and PLSR
+
+```{r}
+set.seed(seed)
+n = nrow(train)
+# pcr
+pcr.fit <- pcr(train$lpsa~train.x, validation = "CV", segments=10)
+pcr.ncomp <- which.min(pcr.fit$validation$PRESS[1, ] / nrow(train))
+pcr.pred <- predict(pcr.fit, ncomp = pcr.ncomp ,newdata = test.x)
+pcr.mse <- mean((pcr.pred - test$lpsa)^2)
+pcr.coef <- coef(pcr.fit, intercept = T)
+# plsr
+plsr.fit <- plsr(train$lpsa~train.x, validation = "CV", segments=10)
+plsr.ncomp <- which.min(plsr.fit$validation$PRESS[1, ] / n)
+plsr.pred <- predict(plsr.fit, ncomp = plsr.ncomp ,newdata = test.x)
+plsr.mse <- mean((plsr.pred - test$lpsa)^2)
+plsr.coef <- coef(plsr.fit, intercept = T)
+```
+
+```{r}
+par(mfrow=c(1,2))
+
+plot(pcr.fit$validation$PRESS[1, ] / n, type="l", main="PCR",
+xlab="Number of Components", ylab="CV MSE")
+
+plot(plsr.fit$validation$PRESS[1, ] / n , type="l", main="PLSR",
+xlab="Number of Components", ylab="CV MSE")
+```
+
+```{r}
+pcr.plot.df <- data.frame(scale(data.frame(pcr.fit$coefficients))) %>% rownames_to_column()
+colnames(pcr.plot.df) <- c("feature", 1:8)
+pcr.plot.df
+
+df2 <- melt(pcr.plot.df, id.vars = "feature")
+
+ggplot(df2) +
+  geom_line(aes(x=as.numeric(variable), y=value, color=feature)) +
+  xlab("Number of Components") +
+  ylab("Standardized Coefficients") +
+  labs(title="PCA")
+```
+
+```{r}
+plsr.plot.df <- data.frame(scale(data.frame(plsr.fit$coefficients))) %>% rownames_to_column()
+colnames(plsr.plot.df) <- c("feature", 1:8)
+
+plsr2 <- melt(plsr.plot.df, id.vars = "feature")
+
+ggplot(plsr2) +
+  geom_line(aes(x=as.numeric(variable), y=value, color=feature)) +
+  xlab("Number of Components") +
+  ylab("Standardized Coefficients") +
+  labs(title="PLS")
+```
+
+## RR and Lasso
+```{r}
+set.seed(seed)
+grid <- 10^seq(10, -2, length=100)
+## ridge
+ridge.mod <- cv.glmnet(train.x, train$lpsa, lambda = grid, alpha = 0, nfolds = 10)
+# using lambda.min before but I read that lambda.1se may be better because it overfits less
+ridge.pred <- predict(ridge.mod, s = "lambda.1se", newx = test.x)
+ridge.mse <- mean((ridge.pred - test$lpsa)^2)
+ridge.coef <- coef.cv.glmnet(ridge.mod)
+
+## lasso
+lasso.mod <- cv.glmnet(train.x, train$lpsa, lambda = grid, alpha = 1, nfolds = 10)
+lasso.pred <- predict(lasso.mod, s = "lambda.1se", newx = test.x)
+lasso.mse <- mean((lasso.pred - test$lpsa)^2)
+lasso.coef <- coef.cv.glmnet(lasso.mod)
+```
+
+```{r regularization_plots}
+#par(mfrow=c(1,2))
+plot.cv.glmnet(ridge.mod)
+plot.cv.glmnet(lasso.mod)
+plot(ridge.mod$glmnet.fit, "norm", label=TRUE, main = "ridge")
+plot(lasso.mod$glmnet.fit, "norm", label=TRUE, main = "lasso")
+```
+
+## Performance Table
+```{r}
+coefs <- cbind(ols.coef, c(coef(best.sub, id=npred), rep(0, 7)), ridge.coef, lasso.coef, pcr.coef, plsr.coef)
+mses <- c(ols.mse, best.sub.mse, ridge.mse, lasso.mse, pcr.mse, plsr.mse)
+performance.table <- rbind(coefs, mses)
+colnames(performance.table) <- c("LS", "Best Subset", "Ridge", "Lasso", "PCR", "PLS")
+performance.table
+```
+
+My results in the table is different from the table in ESL. I am not sure what seed they use so I am unable to reproduce their results.  However, my results are decently similar.  
+
+From the modeling perspective, my results changes when I use a different seed. But in general lasso and best subset seems to have better performances than others. This may suggest some features are either correlated or they have little predictive power in the models.
+
+
