@@ -116,6 +116,12 @@ npred <- which.min(val.error)
 best.sub.mse <- val.error[npred]
 best.sub.mse
 ```
+```{r}
+plot(best.sub$rss, ylab = "RSS", type = 'l', lwd = 2, las = 1,
+xlab = "Number of Variables",
+main = 'Best subset regression: RSS')
+
+```
 
 ## PCR and PLSR
 
@@ -128,6 +134,7 @@ pcr.ncomp <- which.min(pcr.fit$validation$PRESS[1, ] / nrow(train))
 pcr.pred <- predict(pcr.fit, ncomp = pcr.ncomp ,newdata = test.x)
 pcr.mse <- mean((pcr.pred - test$lpsa)^2)
 pcr.coef <- coef(pcr.fit, intercept = T)
+
 # plsr
 plsr.fit <- plsr(train$lpsa~train.x, validation = "CV", segments=10)
 plsr.ncomp <- which.min(plsr.fit$validation$PRESS[1, ] / n)
@@ -175,6 +182,7 @@ ggplot(plsr2) +
 
 ## RR and Lasso
 ```{r}
+seed <- 123
 set.seed(seed)
 grid <- 10^seq(10, -2, length=100)
 ## ridge
