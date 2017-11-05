@@ -1,0 +1,210 @@
+---
+title: "hw5"
+author: "shichenh"
+date: "11/2/2017"
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+cols <- c("class", "alcohol", "malic", "ash", "alcalinity", "magnesium", "phenols", "flavanoids", "nonflavanoids", "proanthocyanins", "color", "hue", "dilution", "proline")
+wine <- read_csv("https://archive.ics.uci.edu/ml/machine-learning-databases/wine/wine.data", col_names = cols)
+wine <- wine %>% mutate(class = factor(class))
+
+iris <- iris
+```
+
+# 1 Sum-of-Squares Dispersion Functions
+
+```{r}
+tss <- function(x){
+  # returns the total sum of squares for a vector
+  avg <- mean(x)
+  return(sum((x- avg)^2))
+}
+
+bss <- function(x, y) {
+  # computes the between group variance
+  if (length(x) != length(y)) {
+    stop("length of x and y are not the same")
+  }
+  group.means <- aggregate(x~y, FUN = mean)[,2] 
+  sum(((group.means - mean(x)))^2 * table(y))
+}
+
+wss <- function(x, y) {
+  # computes the within group sum of squares
+  if (length(x) != length(y)) {
+    stop("length of x and y are not the same")
+  }
+  sum(aggregate(x~y, FUN = tss)[,2])
+}
+```
+
+```{r}
+tss(iris$Sepal.Length)
+bss(iris$Sepal.Length, iris$Species)
+wss(iris$Sepal.Length, iris$Species)
+```
+
+# 2 Sum-of-Square Ratio Functions
+
+```{r}
+cor_ratio <- function(x, y) {
+  bss(x, y)/tss(x)
+}
+
+F_ratio <- function(x, y) {
+  k <- length(levels(y))
+  num <- bss(x, y)/(k-1)
+  denum <- wss(x, y)/(length(x) - k)
+  num/denum
+}
+```
+
+```{r}
+cor_ratio(iris$Sepal.Length, iris$Species)
+
+F_ratio(iris$Sepal.Length, iris$Species)
+```
+
+# 3 Discriminant Power of Predictors
+
+```{r}
+# eleminating one class for simple logistic regression
+wine12 <- wine %>% filter(class != 3)
+```
+
+
+```{r log}
+features <- colnames(wine12[,-c(1)])
+
+aics <- numeric()
+for (i in 1:length(features)) {
+  aics[i] <- (glm(class~., family = binomial, data=wine12[,c("class", features[i])]))$aic
+}
+
+aic.table <- data.frame(feature=features, aic=aics)
+
+ggplot(aic.table) +
+  geom_bar(aes(features, aic), stat = "identity") +
+  theme(axis.text.x = element_text(angle=90))
+```
+
+```{r}
+cor.ratios <- sapply(wine12[,2:ncol(wine12)], 
+                     FUN = function(x) cor_ratio(x, factor(wine12$class)))
+cor.ratios.table <- data.frame(feature=features, cor_ratio=cor.ratios)
+
+ggplot(cor.ratios.table) +
+  geom_bar(aes(features, cor_ratio), stat = "identity") +
+  theme(axis.text.x = element_text(angle=90))
+
+```
+
+```{r}
+f.ratios <- sapply(wine12[,2:ncol(wine12)], 
+                   FUN = function(x) F_ratio(x, factor(wine12$class)))
+f.ratios.table <- data.frame(feature=features, f_ratio=f.ratios)
+
+ggplot(f.ratios.table) +
+  geom_bar(aes(features, f_ratio), stat = "identity") +
+  theme(axis.text.x = element_text(angle=90))
+```
+
+AIC are inversely related to the sum of square ratios.(the smaller aic a predictor has, the stronger it can discrminate the classes, therefore the larger
+sum-of-square ratio it has.
+
+# 4. Variance Function
+
+```{r}
+total_variance <- function(x) {
+  x.mean <- scale(x, scale = F)
+  t(x.mean) %*% x.mean/(nrow(x)-1)
+}
+
+between_variance <- function(x, y) {
+  y.dum <- spatstat::dummify(y)
+  x.mean <- scale(x, scale=F)
+  t(x.mean) %*% y.dum %*% solve(t(y.dum)%*%y.dum)%*%t(y.dum) %*%x.mean/(nrow(x)-1)
+}
+
+within_variance <- function(x, y) {
+  y.dum <- spatstat::dummify(y)
+  x.mean <- scale(x, scale=F)
+  t(x.mean) %*% (diag(rep(1, nrow(y.dum))) - y.dum %*%
+                  solve(t(y.dum)%*%y.dum)%*%t(y.dum))%*%(x.mean)/(nrow(x)-1)
+}
+
+```
+
+```{r}
+total_variance(iris[,1:4])
+between_variance(iris[,1:4], iris$Species)
+within_variance(iris[,1:4], iris$Species)
+```
+
+# 5 Canonical Discriminant Analysis
+
+```{r}
+# wine predictor matrix
+x <- as.matrix(wine[,-c(1)])
+# wine labels 
+y <- wine$class
+
+mu <- t(aggregate(x~y, FUN=mean)[,-c(1)]) 
+avgs <- apply(x, 2, mean)
+
+c1 <- apply(mu, 2, function(x) x - avgs)
+c2 <- apply(c1, 1, function(x) (x * sqrt(as.numeric(table(y))/(length(y)-1))))
+
+cwc <- c2 %*% solve(within_variance(x, y)) %*% t(c2)
+
+wine.svd <- svd(cwc)
+wine.uk <- solve(within_variance(x, y)) %*% t(c2) %*% wine.svd$v[,1:2]
+```
+
+```{r}
+cda <- data.frame(cbind(x %*% wine.uk, y))
+colnames(cda) <- c("x", "y", "class")
+ggplot(cda) +
+  geom_point(aes(x,y, color=factor(class)))
+```
+
+```{r}
+wine.pca <- data.frame(princomp(scale(x))$scores[,1:2], y)
+colnames(wine.pca) <- c("x", "y", "class")
+
+ggplot(wine.pca) +
+  geom_point(aes(x, y, color=class)) 
+
+```
+
+The pca plot is very similar to the Canonical Discriminant Analysis plot with the y inverted into a different direction(which is a non-issue since the -1*eigen vector is still an eigen vector)
+
+```{r}
+cor(cda[,1:2], x)
+```
+
+The correlation between $u_k$ and the predictors shows roughly how much the predictor contributes to distinguishing the class.
+
+```{r}
+maha.dist <- numeric()
+for (i in 1:length(levels(y))) {
+  maha.dist <- cbind(maha.dist, mahalanobis(x, as.numeric(aggregate(x~y, FUN=mean)[,-c(1)][i,]), cov(x)))
+}
+colnames(maha.dist) <- levels(y)
+
+head(maha.dist)
+```
+
+```{r}
+maha.predict <- factor(apply(maha.dist, 1, function(x) levels(y)[which.min(x)]))
+
+table(maha.predict, y)
+```
+
