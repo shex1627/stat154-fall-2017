@@ -1,0 +1,221 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(mvtnorm)
+library(class)
+library(MASS)
+library(caret)
+```
+
+```{r}
+set.seed(123)
+train_idx <- sample(nrow(iris), 90)
+train_set <- iris[train_idx, ]
+test_set <- iris[-train_idx, ]
+```
+
+```{r}
+edist <- function(x, y) {
+  sqrt(sum((x-y)^2))
+}
+```
+
+```{r}
+my_knn <- function(X_train, X_test, Y_train, k) {
+  # Arguments:
+  #   X_train: an ntrain x p predictor matrix
+  #   X_test: an ntest x p predictor matrix
+  #   Y_train: the response vector for the training set
+  #   k: the number of neighbors
+  #
+  # Returns:
+  #   a factor of vector containking the k-nn predictions 
+  labels <- levels(Y_train)
+  Y_test <- factor(NULL,levels=labels)
+  for (i in 1:nrow(X_test)) {
+    distances <- apply(X_train, 1, function(x) edist(X_test[i,], x)) + rnorm(nrow(X_train), 0, 0.1^6)
+    nns <- Y_train[order(distances)[1:k]]
+    #print(distances[order(distances)[1:5]])
+    Y_test[i] <- labels[which.max(table(nns) + rnorm(length(labels), 0, 0.1^6))]
+  }
+  Y_test
+}
+```
+
+```{r}
+my_knn_pred <- my_knn(train_set[,-5], test_set[,-5], train_set$Species, k=1)
+knn_pred <- knn(train_set[,-5], test_set[,-5], train_set$Species, k=1)
+table(my_knn_pred == knn_pred)
+```
+
+
+```{r}
+set.seed(100)
+find_k_CV <- function(X_train, Y_train, k=1:10, nfold=10) {
+  folds <- caret::createFolds(1:length(Y_train), k=nfold)
+  avg_cv <- numeric(length(k))
+  for (i in 1:length(k)) {
+    accuracys <- numeric()
+    for (fold in 1:nfold) {
+      train.features = X_train[-folds[[fold]],]
+      train.labels = Y_train[-folds[[fold]]]
+      
+      test.features = X_train[folds[[fold]],]
+      test.labels = Y_train[folds[[fold]]]
+      
+      accuracys[fold] <- mean(knn(train.features, test.features, train.labels, k=k[i]) == test.labels)
+    }
+    #print(round(accuracys,2))
+    avg_cv[i] <- mean(accuracys)
+  }
+  # adding random noise if the avg cv are too close
+  avg_cv <- avg_cv + rnorm(length(k), 0, 0.1^6)
+  k[which.max(avg_cv)]
+}
+```
+
+```{r}
+find_k_CV(train_set[,-5], train_set[,5], k=1:10)
+```
+
+
+```{r gen_dataset}
+set.seed(100)
+expit <- function(x) {
+  exp(x) / (1 + exp(x))
+}
+
+gen_datasets <- function() {
+  id <- diag(c(1, 1))
+  df1 <- data.frame(y=factor(rep(c(0,1), each=50)),
+                    rbind(rmvnorm(50, mean=c(0,0), sigma = id), 
+                          rmvnorm(50, mean=c(1,1), sigma = id))
+                    )
+  
+  
+  covmat <- matrix(c(1, -0.5, -0.5, 1), nrow=2)
+  df2 <- data.frame(y=factor(rep(c(0, 1), each=50)),
+                    rbind(rmvnorm(50, mean=c(0, 0), sigma=covmat),
+                          rmvnorm(50, mean=c(1, 1), sigma=covmat)
+                    )
+                    )
+  
+  
+  mu <- c(0, 0); sigma <- matrix(c(1, 1/2, 1/2, 1), 2); nu <- 4
+  n <- 50 #number of draws
+  x_first <- t(t(mvrnorm(n, rep(0, length(mu)), sigma) * sqrt(nu / rchisq(n, nu))) + mu)
+  mu <- c(1, 1); sigma <- matrix(c(1, 1/2, 1/2, 1), 2); nu <- 4
+  n <- 50
+  x_second <- t(t(mvrnorm(n, rep(0, length(mu)), sigma) * sqrt(nu / rchisq(n, nu))) + mu)
+  df3 <- data.frame(y=factor(rep(c(0, 1), each=50)), rbind(x_first, x_second))
+  
+  
+  covmat2 <- matrix(c(1, 0.5, 0.5, 1), nrow=2)
+  df4 <- data.frame(y=factor(rep(c(0, 1), each=50)),
+                    rbind(rmvnorm(50, mean=c(0,0), sigma = covmat2),
+                          rmvnorm(50, mean=c(1,1), sigma = covmat))
+  )
+  
+  
+  x <- matrix(rnorm(200), ncol=2)
+  df5_temp <- data.frame(x^2, x[,1] * x[,2])
+  
+  
+  beta <- c(0, 2, -1, -2)
+  y <- apply(df5_temp, 1, function(row) {
+    p <- expit(sum(c(1, row) * beta))
+    sample(x=c(0,1), size=1, prob=c(1-p, p))
+  })
+  df5 <- data.frame(y=factor(y), x)
+  
+  
+  x <- matrix(rnorm(200), ncol=2)
+  y <- 1 * (x[,1]^2 + x[,2]^2 > qchisq(p=0.5, df=2))
+  df6  <- data.frame(y=factor(y), x)
+  
+  list(df1, df2, df3, df4, df5, df6)
+  
+}
+```
+
+```{r}
+dfs <- gen_datasets()
+
+dfs[[1]]
+```
+
+```{r}
+set.seed(123)
+n <- nrow(dfs[[1]])
+train.idx <- sample(1:n, 0.8*n)
+#train.features <- iris[train.idx,-5]
+#train.labels <- iris[trian.idx, 5]
+#test.feature <- iris[-train.idx,-5]
+#train.labels <- iris[-trian.idx, 5]
+train_set <- dfs[[2]][train.idx, ]
+test_set <- dfs[[2]][-train.idx, ]
+
+log.mod <- glm(y~., family = binomial, data = train_set)
+mean(ifelse(predict(log.mod, newdata = test_set[,-1], type = "response") > 0.5, 1, 0) == test_set[,1])
+
+lda.mod <- lda(y~., data=train_set)
+mean(predict(lda.mod, newdata = test_set[,-1])$class == test_set[,1])
+
+qda.mod <- qda(y~., data=train_set)
+mean(predict(qda.mod, newdata = test_set[,-1])$class == test_set[,1])
+
+knn1 <- knn(train_set[,-1], test_set[,-1], train_set$y, k=1)
+mean(knn1 == test_set[,1])
+
+knnCV <- knn(train_set[,-1], test_set[,-1], train_set$y, k=find_k_CV(train_set[,-1], train_set[,1]))
+mean(knnCV == test_set[,1])
+
+```
+
+```{r}
+set.seed(123)
+performance_all <- array(rep(-1, 5*6*100), dim=c(5, 6, 100))
+for (i in 1:100) {
+  performance_iter <- matrix(rep(0, 5*6), nrow=5)
+  for(df.index in 1:6) {
+    n <- nrow(dfs[[df.index]])
+    train.idx <- sample(1:n, 0.8*n)
+    train_set <- dfs[[df.index]][train.idx, ]
+    test_set <- dfs[[df.index]][-train.idx, ]
+
+    log.mod <- glm(y~., family = binomial, data = train_set)
+    performance_iter[4, df.index] = 
+      mean(ifelse(predict(log.mod, newdata = test_set[,-1], type = "response") > 0.5, 1, 0) != test_set[,1])
+
+    lda.mod <- lda(y~., data=train_set)
+    performance_iter[3, df.index] = 
+      mean(predict(lda.mod, newdata = test_set[,-1])$class != test_set[,1])
+
+    qda.mod <- qda(y~., data=train_set)
+    performance_iter[5, df.index] = 
+      mean(predict(qda.mod, newdata = test_set[,-1])$class != test_set[,1])
+
+    knn1 <- knn(train_set[,-1], test_set[,-1], train_set$y, k=1)
+    performance_iter[1, df.index] = 
+      mean(knn1 != test_set[,1])
+
+    knnCV <- knn(train_set[,-1], test_set[,-1], train_set$y, k=find_k_CV(train_set[,-1], train_set[,1]))
+    performance_iter[2, df.index] = mean(knnCV != test_set[,1])
+  }
+  
+  performance_all[,,i] <- performance_iter
+}
+```
+
+```{r}
+par(mfrow=c(1, 3))
+for(i in 1:6) {
+  df <- data.frame(t(performance_all[,i,]))
+  colnames(df) <- c("knn1", "knn-cv", "lda", "logistic", "qda")
+  boxplot(df, main=paste("Scenario", i), col = c("blue", "blue", "green", "green", "pink"))
+}
+```
+
