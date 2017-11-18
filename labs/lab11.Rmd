@@ -1,0 +1,103 @@
+---
+title: "lab11"
+author: "shichenh"
+date: "11/12/2017"
+output: pdf_document
+---
+```{r message=F}
+library(kernlab)
+library(ROCR)
+```
+
+
+```{r datasets}
+set.seed(100)
+X1 <- c(rnorm(100), rnorm(100, mean = 4))
+X2 <- c(rnorm(100), rnorm(100, mean = 4))
+y <- factor(c(rep(0, 100), rep(1, 100)))
+df1 <- data.frame(X1, X2, y)
+
+set.seed(200)
+r <- c(runif(100, 1, 2), runif(100, 5, 6))
+theta <- runif(200, 0, 2 * pi)
+X1 <- r * cos(theta) + rnorm(200)
+X2 <- r * sin(theta) + rnorm(200)
+y <- factor(c(rep(0, 100), rep(1, 100)))
+df2 <- data.frame(X1, X2, y)
+```
+
+```{r}
+pchs <- c(5, 4)
+colors <- c("red", "blue")
+with(df1, plot(X1, X2, pch = pchs[y], col=colors[y]))
+```
+
+```{r}
+pchs <- c(5, 4)
+colors <- c("red", "blue")
+with(df2, plot(X1, X2, pch = pchs[y], col=colors[y]))
+```
+
+# Bulding SVM
+```{r}
+C_vector <- c(0.01, 0.1, 1, 10, 100, 1000, 10000)
+dataset_list <- list(df1, df2)
+
+for (df in dataset_list) {
+  for (C in C_vector) {
+    fit <- ksvm(y~X1+X2, data=df, kernel = "vanilladot", C=C)
+    plot(fit, data=df)
+  }
+}
+```
+
+```{r}
+deg_vector <- 2:5
+gam_vector <- c(0.01, 0.1, 1, 10, 100, 1000, 10000)
+
+for (df in dataset_list) {
+  for (deg in deg_vector) {
+    fit <- ksvm(y~X1+X2, data = df, kernel = "polydot", kpar=list(degree=deg))
+    plot(fit, data=df)
+  }
+}
+```
+
+```{r}
+for (df in dataset_list) {
+  for (gam in gam_vector) {
+    fit <- ksvm(y~X1+X2, data = df, kernel = "rbfdot", kpar=list(sigma=gam))
+    plot(fit, data=df)
+  }
+}
+```
+
+# ROC curve
+```{r train_test}
+train_index <- sample(1:nrow(df2), 0.7 * nrow(df2))
+train <- df2[train_index, ]
+test <- df2[-train_index, ]
+```
+
+
+```{r}
+lda.mod <- MASS::lda(y~X1+X2, data=train)
+lda.pred <- predict(lda.mod, newdata = test)
+lda.post <- lda.pred$posterior
+
+lda.prediction <- prediction(lda.post[,1], test$y)
+#roc <- performance(lda.prediction, measure = "tpr", x.measure = "fpr")
+roc <- performance(lda.prediction, measure = "tpr", x.measure = "fpr")
+```
+
+```{r}
+plot(roc)
+abline(0, 1)
+```
+
+```{r}
+auc.perf <- performance(lda.prediction, measure = "auc")
+auc.perf@y.values
+```
+
+Because the area under the curve < 0.5, it is worse than a random classifier.

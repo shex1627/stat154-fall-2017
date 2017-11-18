@@ -172,7 +172,9 @@ wine.uk <- solve(within_variance(x, y)) %*% t(c2) %*% wine.svd$v[,1:2]
 cda <- data.frame(cbind(x %*% wine.uk, y))
 colnames(cda) <- c("x", "y", "class")
 ggplot(cda) +
-  geom_point(aes(x,y, color=factor(class)))
+  geom_point(aes(x,y, color=factor(class))) +
+  labs(color="class", title="Canonical coordinates on wine dataset") 
+  
 ```
 
 ```{r}
@@ -180,7 +182,8 @@ wine.pca <- data.frame(princomp(scale(x))$scores[,1:2], y)
 colnames(wine.pca) <- c("x", "y", "class")
 
 ggplot(wine.pca) +
-  geom_point(aes(x, y, color=class)) 
+  geom_point(aes(x, -y, color=class)) +
+  labs(y=y, title="First two principal component on the wine dataset")
 
 ```
 
