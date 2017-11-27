@@ -1,0 +1,147 @@
+---
+title: "lab12"
+author: "shichenh"
+date: "11/18/2017"
+output: pdf_document
+---
+
+```{r libraries, message=F}
+library(ISLR)
+library(tree)
+library(randomForest)
+library(gbm)
+library(ggplot2)
+```
+
+```{r dataset, message=F}
+attach(Carseats)
+High <- ifelse(Sales <= 8, "No", "Yes")
+carseats <- data.frame(Carseats, High)
+```
+
+```{r}
+tree_carseats <- tree(High ~.-Sales, data=carseats)
+```
+
+```{r}
+summary(tree_carseats)
+```
+
+We have a 9% training misclassification error. 
+
+
+```{r}
+# show plot 
+plot(tree_carseats)
+text(tree_carseats, pretty=0)
+```
+
+Seems like price is a very strong tree divider(consistently separates categories in many depths). ShelveLoc is also a strong predictor since it is a the top of the tree. 
+
+```{r}
+# display
+tree_carseats
+```
+
+Asumming the first number () at the end of each root is the accuracy, some roots are performing very bad and some are very good. 
+
+# Random Forest 
+
+```{r}
+set.seed(123)
+train_index <- sample(1:nrow(carseats), nrow(carseats)*0.8)
+train <- carseats[train_index,]
+test <- carseats[-train_index,]
+
+rf_mod <- randomForest(High ~.-Sales, data=train, importance = T)
+rf_mod
+```
+
+```{r}
+mean(predict(rf_mod, data=test) != test$High)
+```
+
+The test error is significantly greater than the OOB error. 
+
+```{r}
+randomForest::importance(rf_mod)
+varImpPlot(rf_mod)
+```
+In seed 123, the two most important variables are Price and ShelveLoc.
+
+# Boosted Trees
+```{r}
+set.seed(123)
+btree <- gbm(Sales > 8 ~.-Sales-High, 
+             distribution = "bernoulli",
+             n.tree = 5000, 
+             data=train)
+test_error = predict(btree, newdata=test, n.trees=5000, type = "response")
+```
+
+```{r}
+summary(btree)
+```
+
+In seed 123, the two most important variable are Price and Shelveloc. 
+
+```{r}
+test_rates <- numeric()
+ntrees <- seq(10, 5000, 10)
+for (i in 1:length(ntrees)) {
+  pred = predict(btree, newdata=test, n.trees=ntrees[i], type = "response")
+  test_rates[i] = mean((pred >= 0.5) != (test$Sales > 8))
+  if (i %% 500 == 0){
+    #print(paste(i, "iterations completed"))
+  }
+}
+```
+
+```{r}
+plot(ntrees, test_rates, xlab="number of trees used in predction", ylab="test error")
+```
+
+```{r training_depth_trees}
+# make the matrix for test error for different depths 
+test_rates_depth <- matrix(rep(-1, 4*length(ntrees)), nrow=4)
+for (depth in 1:4) {
+  # make a new forest for each depth
+  temp.btree = gbm(Sales > 8 ~.-Sales-High,
+                     distribution = "bernoulli",
+                     n.tree = 5000, 
+                     interaction.depth=depth, 
+                     data=train)
+  # run the predictions with different number of trees 
+  for (ntree in 1:length(ntrees)){
+    temp.pred = predict(temp.btree, newdata=test, n.trees=ntrees[ntree], type = "response")
+    test_rates_depth[depth, ntree] = mean((temp.pred >= 0.5) != (test$Sales > 8))
+  }
+  # just to check how many models I need to make
+  #print(paste(depth, "forests completed"))
+}
+
+```
+
+```{r plotting_depth_rate}
+test_rates_depth <- data.frame(t(test_rates_depth))
+colnames(test_rates_depth) <- paste0("depth",c(1:4))
+
+ggplot(test_rates_depth) +
+  geom_line(aes(ntrees, depth1, colour = "depth1")) +
+  geom_line(aes(ntrees, depth2, colour = "depth2")) +
+  geom_line(aes(ntrees, depth3, colour = "depth3")) +
+  geom_line(aes(ntrees, depth4, colour = "depth4")) +
+  scale_color_manual(name="tree depth", values=c(depth1="orange", depth2="blue", depth3="green", depth4="red"))
+```
+
+
+```{r include=F}
+plot(ntrees, rep(0.5, 500), ylim = c(0.2, 0.5))
+depth_colors = c("red", "blue", "green", "yellow")
+for(i in 1:4) {
+  lines(ntrees, test_rates_depth[,i], col=depth_colors[i])
+}
+```
+
+In general, the higher the depth(from 1 to 4), the lower the maximum error rate is. Also the error rate converges to maximum error rate as we use more trees to make the prediction. The convergent rate goes fast at the beginning then slows down after 1000 trees. 
+
